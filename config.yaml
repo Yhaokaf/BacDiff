@@ -1,0 +1,74 @@
+run_name: default_run
+output_dir: outputs
+
+data:
+  merged_h5ad: data/OSCC_11_merged.h5ad
+
+preprocess:
+  target_sum: 10000.0
+  log1p_input: true
+  n_top_genes: 500
+  hvg_flavor: seurat
+
+model:
+  latent_dim: 32
+  hidden_dim: 512
+  encoder_layers: 2
+  bacteria_hidden_dim: 128
+  bacteria_layers: 2
+  decoder_hidden_dim: 512
+  decoder_layers: 2
+  dropout: 0.1
+  use_layer_norm: true
+
+diffusion:
+  timesteps: 100
+  beta_start: 0.0001
+  beta_end: 0.02
+  time_embed_dim: 64
+  hidden_dim: 256
+  layers: 3
+  dropout: 0.0
+  use_layer_norm: false
+  condition_dropout: 0.0
+  guidance_scale: 1.0
+
+optimizer:
+  name: adamw
+  learning_rate: 0.0005
+  weight_decay: 1.0e-05
+  betas: [0.9, 0.999]
+
+scheduler:
+  type: plateau
+  factor: 0.5
+  patience: 5
+  min_lr: 1.0e-06
+
+training:
+  seed: 42
+  device: auto
+  epochs: 50
+  batch_size: 128
+  grad_clip_norm: 5.0
+  num_workers: 0
+  use_amp: false
+  deterministic: true
+  log_every: 50
+
+loss_weights:
+  recon: 1.0
+  kl: 0.01
+  diffusion: 1.0
+  none_diffusion: 0.5
+  smoothness: 0.01
+  sparsity: 0.001
+
+early_stopping:
+  patience: 10
+  min_delta: 0.0
+
+output:
+  root_dir: outputs/default_run
+  checkpoint_name: best_model.pt
+  history_name: train_log.csv
