@@ -13,9 +13,11 @@ import yaml
 from torch.cuda.amp import GradScaler, autocast
 from tqdm import tqdm
 
-from data import create_dataloader, prepare_split, set_seed
-from losses import compute_total_loss
-from model import BacDiffModel
+from bacdiff.data.dataset import create_dataloader, prepare_split
+from bacdiff.models.losses import compute_total_loss
+from bacdiff.models.model import BacDiffModel
+from bacdiff.utils.config import load_config
+from bacdiff.utils.runtime import set_seed
 
 
 def parse_args() -> argparse.Namespace:
@@ -23,12 +25,6 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train BacDiff: NB-VAE + conditional residual diffusion.")
     parser.add_argument("--config", required=True, type=str, help="Path to config.yaml")
     return parser.parse_args()
-
-
-def load_config(path: str | Path) -> dict[str, Any]:
-    """Load YAML configuration."""
-    with open(path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
 
 
 def move_batch_to_device(batch: dict[str, Any], device: torch.device) -> dict[str, Any]:

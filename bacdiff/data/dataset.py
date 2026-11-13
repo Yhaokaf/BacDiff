@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import random
 from pathlib import Path
 from typing import Any
 
@@ -12,25 +11,6 @@ import scipy.sparse as sp
 import torch
 from sklearn.model_selection import StratifiedShuffleSplit
 from torch.utils.data import DataLoader, Dataset
-
-
-def set_seed(seed: int, deterministic: bool = True) -> None:
-    """Set Python, NumPy, and PyTorch random seeds."""
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    if deterministic:
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
-
-
-def resolve_device(device_cfg: str) -> torch.device:
-    """Resolve a runtime device from config."""
-    if device_cfg == "auto":
-        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    return torch.device(device_cfg)
-
 
 def _to_numpy_dense(matrix: Any) -> np.ndarray:
     """Convert a dense or sparse matrix to a float32 numpy array."""

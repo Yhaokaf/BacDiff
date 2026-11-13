@@ -5,7 +5,7 @@ from typing import Any
 import torch
 import torch.nn.functional as F
 
-from model import ModelOutput, NBDecoder
+from bacdiff.models.model import ModelOutput, NBDecoder
 
 
 def nb_reconstruction_loss(counts: torch.Tensor, mu: torch.Tensor, theta: torch.Tensor) -> torch.Tensor:

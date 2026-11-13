@@ -99,7 +99,7 @@ def main() -> None:
     parser.add_argument(
         "--data-dir",
         type=Path,
-        default=Path(__file__).resolve().parent / "data",
+        default=Path(__file__).resolve().parents[2] / "data",
         help="Directory containing paired GEX and 16S .h5ad files",
     )
     parser.add_argument("--min-cells-per-bacteria", type=int, default=100)

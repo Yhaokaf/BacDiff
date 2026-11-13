@@ -9,13 +9,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import torch
-import yaml
 from scipy.stats import pearsonr, spearmanr
 from sklearn.metrics import r2_score
 from tqdm import tqdm
 
-from data import create_dataloader, prepare_split, set_seed
-from model import BacDiffModel
+from bacdiff.data.dataset import create_dataloader, prepare_split
+from bacdiff.models.model import BacDiffModel
+from bacdiff.utils.config import load_config, resolve_run_dir
+from bacdiff.utils.runtime import set_seed
 
 
 def parse_args() -> argparse.Namespace:
@@ -23,17 +24,6 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Evaluate BacDiff on held-out test set.")
     parser.add_argument("--config", required=True, type=str, help="Path to config.yaml")
     return parser.parse_args()
-
-
-def load_config(path: str | Path) -> dict[str, Any]:
-    """Load YAML configuration."""
-    with open(path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
-
-
-def resolve_run_dir(config: dict[str, Any]) -> Path:
-    """Resolve the canonical output directory for the current run."""
-    return Path(config["output_dir"]) / str(config["run_name"])
 
 
 def move_batch_to_device(batch: dict[str, Any], device: torch.device) -> dict[str, Any]:

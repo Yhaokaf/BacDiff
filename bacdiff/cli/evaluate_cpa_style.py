@@ -5,7 +5,7 @@ Computes r2_mean_deg on top DEGs (10, 20, 50, all) per condition,
 matching CPA's evaluation methodology exactly.
 
 Usage:
-    python evaluate_cpa_style.py --config config_sciplex.yaml
+    python -m bacdiff.cli.evaluate_cpa_style --config configs/config_sciplex.yaml --original_h5ad /path/to/original_sciplex.h5ad
 """
 from __future__ import annotations
 
@@ -18,14 +18,14 @@ import anndata as ad
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import scanpy as sc
 import torch
-import yaml
 from sklearn.metrics import r2_score
 from tqdm import tqdm
 
-from data import create_dataloader, preprocess_rna, select_gene_names, set_seed
-from model import BacDiffModel
+from bacdiff.data.dataset import create_dataloader, preprocess_rna, select_gene_names
+from bacdiff.models.model import BacDiffModel
+from bacdiff.utils.config import load_config, resolve_run_dir
+from bacdiff.utils.runtime import set_seed
 
 
 def parse_args() -> argparse.Namespace:
@@ -38,15 +38,6 @@ def parse_args() -> argparse.Namespace:
         help="Original h5ad with layers['counts'] and uns['rank_genes_groups_cov']",
     )
     return parser.parse_args()
-
-
-def load_config(path: str) -> dict[str, Any]:
-    with open(path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
-
-
-def resolve_run_dir(config: dict[str, Any]) -> Path:
-    return Path(config["output_dir"]) / str(config["run_name"])
 
 
 def move_batch_to_device(batch: dict[str, Any], device: torch.device) -> dict[str, Any]:
@@ -250,7 +241,7 @@ def main() -> None:
     print(f"  Control cells: {ctrl_mask.sum()}")
 
     # Build a SingleCellDataset for OOD cells
-    from data import SingleCellDataset
+    from bacdiff.data.dataset import SingleCellDataset
 
     bac_raw_full = proc_adata.obsm["bacteria_raw"].astype(np.float32)
     bac_mean = bac_raw_full[~ood_mask].mean(axis=0, keepdims=True).astype(np.float32)

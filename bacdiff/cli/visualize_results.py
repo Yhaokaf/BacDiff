@@ -2,24 +2,12 @@
 """可视化反事实预测结果，展示模型预测效果。"""
 import argparse
 from pathlib import Path
-from typing import Any
-
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import yaml
 from matplotlib.gridspec import GridSpec
 
-
-def load_config(path: str) -> dict[str, Any]:
-    with open(path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
-
-
-def resolve_run_dir(config: dict[str, Any]) -> Path:
-    if "output_dir" in config and "run_name" in config:
-        return Path(config["output_dir"]) / str(config["run_name"])
-    return Path(config["output"]["root_dir"])
+from bacdiff.utils.config import load_config, resolve_run_dir
 
 
 def plot_dose_response_curves(dose_df: pd.DataFrame, save_dir: Path, top_n: int = 10):

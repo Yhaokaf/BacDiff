@@ -124,7 +124,7 @@ def main() -> None:
     parser.add_argument(
         "--output",
         type=str,
-        default=str(Path(__file__).resolve().parent / "sciplex_merged.h5ad"),
+        default=str(Path(__file__).resolve().parents[2] / "data" / "sciplex_merged.h5ad"),
         help="Output path for BacDiff-format h5ad",
     )
     args = parser.parse_args()
