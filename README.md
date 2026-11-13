@@ -2,6 +2,12 @@
 
 BacDiff models bacterial perturbation effects on single-cell RNA expression with a variational encoder, conditional latent diffusion, and a Negative Binomial decoder. It includes data preparation, model training, held-out evaluation, and counterfactual dose scans.
 
+## Model overview
+
+The RNA encoder produces base and total cell embeddings. A bacteria-conditioned diffusion model predicts the latent shift, which the decoder maps back to gene expression. The lower panel illustrates bacteria and dose counterfactuals.
+
+![BacDiff model architecture and counterfactual workflow](assets/bacdiff_model.png)
+
 ## Repository layout
 
 ```text
