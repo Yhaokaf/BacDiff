@@ -1,0 +1,47 @@
+run_name: bacdiff
+output_dir: checking_data/outputs/sciplex3_pair_ood
+data:
+  merged_h5ad: data/sciplex3_pair_ood_500hvg.h5ad
+  split_key: split
+  n_genes: 500
+  target_sum: 10000.0
+
+model:
+  latent_dim: 32
+  hidden_dim: 384
+  encoder_layers: 2
+  bacteria_hidden_dim: 128
+  bacteria_layers: 2
+  decoder_hidden_dim: 384
+  decoder_layers: 2
+  dropout: 0.05
+  use_layer_norm: true
+
+diffusion:
+  schedule: cosine
+  timesteps: 100
+  beta_start: 0.0001
+  beta_end: 0.02
+  time_embed_dim: 64
+  hidden_dim: 256
+  layers: 4
+  dropout: 0.0
+  use_layer_norm: false
+  condition_dropout: 0.1
+  guidance_scale: 1.0
+
+training:
+  seed: 42
+  device: auto
+  batch_size: 4096
+  vae_epochs: 16
+  diffusion_epochs: 32
+  patience: 6
+  vae_lr: 0.001
+  diffusion_lr: 0.001
+  kl_weight: 0.1
+  grad_clip_norm: 5.0
+
+generation:
+  cells_per_condition: 256
+  batch_size: 4096

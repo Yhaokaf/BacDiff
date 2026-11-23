@@ -90,10 +90,9 @@ def preprocess_rna(adata: ad.AnnData, config: dict[str, Any]) -> tuple[np.ndarra
     n_top_genes = int(config["preprocess"].get("n_top_genes", 2000))
     hvg_flavor = str(config["preprocess"].get("hvg_flavor", "seurat"))
 
-    # Raw counts (used as reconstruction target; when data is already log1p'd
-    # we store the same values -- the NB decoder works on raw counts, but for
-    # already-processed data the counts field is best-effort.)
-    x_counts = _to_numpy_dense(adata.X).astype(np.float32)
+    # Prefer the original count layer when X stores normalized/log1p values.
+    count_matrix = adata.layers["counts"] if "counts" in adata.layers else adata.X
+    x_counts = _to_numpy_dense(count_matrix).astype(np.float32)
 
     # Normalize + log1p (skip when data is already preprocessed)
     norm = adata.copy()
@@ -198,10 +197,17 @@ def prepare_split(config: dict[str, Any]) -> tuple[SingleCellDataset, SingleCell
     train_idx = trainval_idx[train_sub_idx]
     val_idx = trainval_idx[val_sub_idx]
 
-    # Bacteria z-score: fit on train only
+    # Binary perturbation indicators should keep an exact all-zero control.
     bac_train = bac_raw_full[train_idx]
-    bac_mean = bac_train.mean(axis=0, keepdims=True).astype(np.float32)
-    bac_std = (bac_train.std(axis=0, keepdims=True) + 1e-6).astype(np.float32)
+    condition_normalization = str(config.get("data", {}).get("condition_normalization", "zscore"))
+    if condition_normalization == "zscore":
+        bac_mean = bac_train.mean(axis=0, keepdims=True).astype(np.float32)
+        bac_std = (bac_train.std(axis=0, keepdims=True) + 1e-6).astype(np.float32)
+    elif condition_normalization == "none":
+        bac_mean = np.zeros((1, bac_raw_full.shape[1]), dtype=np.float32)
+        bac_std = np.ones((1, bac_raw_full.shape[1]), dtype=np.float32)
+    else:
+        raise ValueError(f"Unsupported condition_normalization: {condition_normalization}")
 
     bac_train_z = ((bac_raw_full[train_idx] - bac_mean) / bac_std).astype(np.float32)
     bac_val_z = ((bac_raw_full[val_idx] - bac_mean) / bac_std).astype(np.float32)
@@ -304,10 +310,17 @@ def prepare_split_by_key(
     print(f"[data] Split key: {split_key}")
     print(f"[data] Train: {len(train_idx)}, Val: {len(val_idx)}, OOD: {len(test_idx)}")
 
-    # Bacteria z-score: fit on train only
+    # Binary perturbation indicators should keep an exact all-zero control.
     bac_train = bac_raw_full[train_idx]
-    bac_mean = bac_train.mean(axis=0, keepdims=True).astype(np.float32)
-    bac_std = (bac_train.std(axis=0, keepdims=True) + 1e-6).astype(np.float32)
+    condition_normalization = str(config.get("data", {}).get("condition_normalization", "zscore"))
+    if condition_normalization == "zscore":
+        bac_mean = bac_train.mean(axis=0, keepdims=True).astype(np.float32)
+        bac_std = (bac_train.std(axis=0, keepdims=True) + 1e-6).astype(np.float32)
+    elif condition_normalization == "none":
+        bac_mean = np.zeros((1, bac_raw_full.shape[1]), dtype=np.float32)
+        bac_std = np.ones((1, bac_raw_full.shape[1]), dtype=np.float32)
+    else:
+        raise ValueError(f"Unsupported condition_normalization: {condition_normalization}")
 
     bac_train_z = ((bac_raw_full[train_idx] - bac_mean) / bac_std).astype(np.float32)
     bac_val_z = ((bac_raw_full[val_idx] - bac_mean) / bac_std).astype(np.float32)

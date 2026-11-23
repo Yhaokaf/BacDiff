@@ -52,6 +52,51 @@ python -m bacdiff.cli.evaluate_cpa_style --config configs/config_sciplex.yaml --
 
 Other configs are provided for OSCC15, M5, M20, and Sci-Plex. Edit their data paths and training settings for your environment.
 
+## Sci-Plex 3 OT benchmark
+
+The repository also contains the unpaired Sci-Plex 3 OT experiment. It holds
+out complete cell-line by drug pairs while keeping all doses, exposure times,
+and replicates of each pair together. This is a known-drug cross-cell-line
+transfer task, not an unseen-drug or dose-extrapolation benchmark.
+
+The data contain separate vehicle and treated populations; they do not contain
+before/after measurements of the same cell. During OT training,
+`bacdiff.data.sciplex3_pairing.ConditionPairer` first restricts vehicle
+candidates to the same cell-line and time context, then samples a balanced
+entropic Sinkhorn coupling in frozen VAE latent space. The resulting
+vehicle-treated assignments are pseudo-pairs used to form latent residuals;
+they are not observed single-cell trajectories.
+
+Prepare the labeled 500-HVG benchmark from the downloaded GEO files:
+
+```bash
+python checking_data/prepare_sciplex3_pair_ood.py \
+  --raw-dir data/sciplex3_raw \
+  --output data/sciplex3_pair_ood_500hvg.h5ad
+```
+
+Train and generate the OT model:
+
+```bash
+python -m bacdiff.cli.sciplex3_pair \
+  --config configs/config_sciplex3_pair_ood.yaml --mode both --split ood
+```
+
+To compare centroid, random, and OT matching with a frozen VAE:
+
+```bash
+python -m bacdiff.cli.sciplex3_pair_ablation fit \
+  --config configs/config_sciplex3_pair_ablation.yaml --arm ot
+python -m bacdiff.cli.sciplex3_pair_ablation predict \
+  --config configs/config_sciplex3_pair_ablation.yaml --arm ot --split ood
+```
+
+The common scorer reports Energy/MMD distribution distances, mean expression
+metrics, treatment-effect correlation, response strata, pair-level summaries,
+and bootstrap contrasts. It uses train-only PCA and kernel calibration. The
+evaluation scripts are in `checking_data/`; datasets, checkpoints, and output
+tables are intentionally excluded from Git.
+
 ## Data preparation
 
 Put paired GEX and 16S files in `data/`, then merge the OSCC15, M5, and M20 datasets:

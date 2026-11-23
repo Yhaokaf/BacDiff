@@ -85,7 +85,8 @@ def convert(args: argparse.Namespace) -> None:
 
     # Copy useful metadata
     for col in ["control", "condition", "condition_ID", "Drug1", "Drug2",
-                 "dose_value", "pathway1", "pathway2", "cell_line", "split"]:
+                 "dose_value", "pathway1", "pathway2", "cell_line", "split",
+                 "split_1ct_MEC", "batch", "batch_cov"]:
         if col in adata.obs.columns:
             out.obs[col] = adata.obs[col].values
 
@@ -96,6 +97,9 @@ def convert(args: argparse.Namespace) -> None:
 
     # Copy var info
     out.var = adata.var.copy()
+
+    if "counts" in adata.layers:
+        out.layers["counts"] = adata.layers["counts"].copy()
 
     # Copy embeddings if present
     for key in adata.obsm.keys():

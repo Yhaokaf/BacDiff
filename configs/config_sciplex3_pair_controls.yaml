@@ -1,0 +1,9 @@
+model_config: configs/config_sciplex3_pair_ood.yaml
+frozen_checkpoint: checking_data/outputs/sciplex3_pair_ood/bacdiff/best_model.pt
+output_dir: checking_data/outputs/sciplex3_pair_controls
+validation_cells: 64
+validate_every: 4
+pair_batch_size: 32
+ot_epsilon: 0.1
+ot_iterations: 32
+expr_aux_weight: 0.05

@@ -151,6 +151,7 @@ class LatentDiffusion(nn.Module):
         dropout: float,
         use_layer_norm: bool,
         condition_dropout: float = 0.0,
+        schedule: str = "linear",
     ) -> None:
         super().__init__()
         self.latent_dim = latent_dim
@@ -158,7 +159,14 @@ class LatentDiffusion(nn.Module):
         self.timesteps = timesteps
         self.condition_dropout = condition_dropout
 
-        betas = torch.linspace(beta_start, beta_end, timesteps, dtype=torch.float32)
+        if schedule == "linear":
+            betas = torch.linspace(beta_start, beta_end, timesteps, dtype=torch.float32)
+        elif schedule == "cosine":
+            steps = torch.linspace(0, 1, timesteps + 1, dtype=torch.float64)
+            alpha_bar = torch.cos((steps + 0.008) / 1.008 * (math.pi / 2)).square()
+            betas = (1 - alpha_bar[1:] / alpha_bar[:-1]).clamp(max=0.999).float()
+        else:
+            raise ValueError(f"Unknown diffusion schedule: {schedule}")
         alphas = 1.0 - betas
         alphas_cumprod = torch.cumprod(alphas, dim=0)
         alphas_cumprod_prev = torch.cat([torch.ones(1), alphas_cumprod[:-1]], dim=0)
@@ -347,8 +355,8 @@ class NBDecoder(nn.Module):
     @torch.no_grad()
     def sample_counts(self, mu: torch.Tensor, theta: torch.Tensor) -> torch.Tensor:
         """Sample count realizations from the decoder's NB distribution."""
-        probs = theta / (theta + mu)
-        distribution = torch.distributions.NegativeBinomial(total_count=theta, probs=probs)
+        # PyTorch uses mean = total_count * exp(logits).
+        distribution = torch.distributions.NegativeBinomial(total_count=theta, logits=mu.log() - theta.log())
         return distribution.sample()
 
 
@@ -434,6 +442,7 @@ class BacDiffModel(nn.Module):
             dropout=float(diffusion_cfg["dropout"]),
             use_layer_norm=bool(diffusion_cfg["use_layer_norm"]),
             condition_dropout=float(diffusion_cfg.get("condition_dropout", 0.0)),
+            schedule=str(diffusion_cfg.get("schedule", "linear")),
         )
         self.decoder = NBDecoder(
             latent_dim=self.latent_dim,
@@ -460,12 +469,8 @@ class BacDiffModel(nn.Module):
         z = encoded["z"]            # [B, latent_dim]
         z_mean = encoded["z_mean"]  # [B, latent_dim]
 
-        # Compute z_base from none cells in this batch
-        if is_none.any():
-            z_base = z[is_none].mean(dim=0, keepdim=True).expand_as(z)  # [B, latent_dim]
-        else:
-            # Fallback: use precomputed mean_z_base (for eval when batch has no none cells)
-            z_base = self.mean_z_base.unsqueeze(0).expand_as(z)
+        # Use one train-control reference in both training and inference.
+        z_base = self.mean_z_base.unsqueeze(0).expand_as(z)
 
         # Delta: only meaningful for bacteria cells, but we compute for all
         delta_true = z - z_base  # [B, latent_dim]
@@ -483,7 +488,7 @@ class BacDiffModel(nn.Module):
             condition_bacteria = condition[bacteria_mask]
             diffusion_outputs = self.diffusion.diffusion_loss(delta_bacteria, condition_bacteria)
             delta_pred = torch.zeros_like(delta_true)
-            delta_pred[bacteria_mask] = diffusion_outputs["delta_pred"]
+            delta_pred[bacteria_mask] = diffusion_outputs["delta_pred"].to(delta_pred.dtype)
             diffusion_loss = diffusion_outputs["diffusion_loss"]
             diffusion_t = diffusion_outputs["t"]
             diffusion_noise = diffusion_outputs["noise"]
@@ -507,6 +512,7 @@ class BacDiffModel(nn.Module):
 
         # Reconstruct
         z_hat = z_base + delta_pred
+        z_hat[is_none] = z[is_none].to(z_hat.dtype)
         mu, theta = self.decoder(z_hat, library_size=library_size)
 
         return ModelOutput(

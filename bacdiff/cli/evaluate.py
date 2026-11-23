@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import torch
+from scipy.spatial.distance import cdist, pdist
 from scipy.stats import pearsonr, spearmanr
 from sklearn.metrics import r2_score
 from tqdm import tqdm
@@ -46,6 +47,26 @@ def safe_spearman(x: np.ndarray, y: np.ndarray) -> float:
     if np.std(x) < 1e-12 or np.std(y) < 1e-12:
         return float("nan")
     return float(spearmanr(x, y)[0])
+
+
+def population_distances(true_x: np.ndarray, pred_x: np.ndarray, seed: int) -> tuple[float, float]:
+    """Estimate RBF-MMD and energy distance on a bounded random cell sample."""
+    rng = np.random.default_rng(seed)
+    n = min(512, len(true_x), len(pred_x))
+    true_x = true_x[rng.choice(len(true_x), n, replace=False)]
+    pred_x = pred_x[rng.choice(len(pred_x), n, replace=False)]
+    pooled = np.concatenate([true_x, pred_x], axis=0)
+    scale = pooled.std(axis=0).clip(1e-3)
+    true_z, pred_z = true_x / scale, pred_x / scale
+    all_sq = pdist(np.concatenate([true_z, pred_z]), metric="sqeuclidean")
+    positive = all_sq[all_sq > 0]
+    gamma = 1.0 / max(float(np.median(positive)) if len(positive) else 1.0, 1e-8)
+    tt = np.exp(-gamma * cdist(true_z, true_z, metric="sqeuclidean"))
+    pp = np.exp(-gamma * cdist(pred_z, pred_z, metric="sqeuclidean"))
+    tp = np.exp(-gamma * cdist(true_z, pred_z, metric="sqeuclidean"))
+    mmd = float(tt.mean() + pp.mean() - 2.0 * tp.mean())
+    energy = float(2 * cdist(true_z, pred_z).mean() - cdist(true_z, true_z).mean() - cdist(pred_z, pred_z).mean())
+    return mmd, energy
 
 
 @torch.no_grad()
@@ -107,6 +128,11 @@ def evaluate_fold(
     bac_total_load = np.concatenate(bac_load_list, axis=0).ravel()
     label_array = np.array(label_list)
 
+    train_data = train_loader.dataset
+    train_counts = train_data.x_counts.numpy()
+    train_none = train_data.is_none.numpy()
+    control_mean_log = np.log1p(train_counts[train_none]).mean(axis=0)
+
     # 指标在 log1p 空间计算
     # NB loss target = raw counts，所以 mu 也在 raw count 空间
     # 对 pred 和 true 都做 log1p，在同一空间比较
@@ -133,11 +159,22 @@ def evaluate_fold(
         r2 = r2_score(true_mean, pred_mean)
         pearson_val, _ = pearsonr(true_mean, pred_mean)
         spearman_val, _ = spearmanr(true_mean, pred_mean)
+        true_delta = true_mean - control_mean_log
+        pred_delta = pred_mean - control_mean_log
+        top_idx = np.argsort(np.abs(true_delta))[-min(50, len(true_delta)):]
+        top_sign_accuracy = float(np.mean(np.sign(true_delta[top_idx]) == np.sign(pred_delta[top_idx])))
+        mmd, energy = population_distances(true_log[mask], pred_log[mask], seed=42)
 
         group_metrics[label] = {
             "r2": float(r2),
             "pearson": float(pearson_val),
             "spearman": float(spearman_val),
+            "rmse": float(np.sqrt(np.mean((true_mean - pred_mean) ** 2))),
+            "mae": float(np.mean(np.abs(true_mean - pred_mean))),
+            "delta_pearson": safe_pearson(true_delta, pred_delta),
+            "top50_de_sign_accuracy": top_sign_accuracy,
+            "mmd_rbf": mmd,
+            "energy_distance": energy,
             "n_cells": int(n),
         }
 
@@ -263,6 +300,12 @@ def evaluate_fold(
         "per_cell_corr_vs_load_spearman": spearman_quality_vs_load,
         "delta_norm_vs_load_spearman": delta_vs_load_spearman,
         "mean_per_cell_pearson": float(np.nanmean(per_cell_corr)),
+        "rmse_per_group_mean": float(np.mean([m["rmse"] for m in group_metrics.values()])),
+        "mae_per_group_mean": float(np.mean([m["mae"] for m in group_metrics.values()])),
+        "delta_pearson_per_group_mean": float(np.nanmean([m["delta_pearson"] for m in group_metrics.values()])),
+        "top50_de_sign_accuracy_mean": float(np.mean([m["top50_de_sign_accuracy"] for m in group_metrics.values()])),
+        "mmd_rbf_per_group_mean": float(np.mean([m["mmd_rbf"] for m in group_metrics.values()])),
+        "energy_distance_per_group_mean": float(np.mean([m["energy_distance"] for m in group_metrics.values()])),
         "n_test_cells": int(true_expr.shape[0]),
         "n_groups": len(group_metrics),
         "n_load_strata": len(load_stratified_metrics),

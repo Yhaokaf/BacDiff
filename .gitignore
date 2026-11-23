@@ -7,6 +7,10 @@ venv/
 # Local datasets and generated experiment artifacts
 data/*.h5ad
 outputs/
+checking_data/outputs/
+checking_data/*.h5ad
+*.pt
+*.npz
 
 # Notebook checkpoints
 .ipynb_checkpoints/
