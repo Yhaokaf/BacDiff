@@ -45,3 +45,8 @@ training:
 generation:
   cells_per_condition: 256
   batch_size: 4096
+
+flow:
+  noise_sigma: 1.5
+  integration_steps: 32
+  integration_method: rk4

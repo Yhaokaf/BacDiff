@@ -256,6 +256,84 @@ class LatentDiffusion(nn.Module):
             "diffusion_loss": loss,
         }
 
+    def predict_velocity(
+        self,
+        x_t: torch.Tensor,
+        t: torch.Tensor,
+        condition: torch.Tensor,
+        force_unconditional: bool = False,
+    ) -> torch.Tensor:
+        """Predict a continuous-time flow velocity in the latent residual space."""
+        conditioned = self._maybe_dropout_condition(condition, force_unconditional=force_unconditional)
+        time_embedding = self.time_embedding(t.float() * (self.timesteps - 1))
+        return self.epsilon_network(torch.cat([x_t, conditioned, time_embedding], dim=-1))
+
+    def flow_matching_loss(
+        self,
+        source: torch.Tensor,
+        target: torch.Tensor,
+        condition: torch.Tensor,
+        noise_sigma: float = 1.5,
+    ) -> dict[str, torch.Tensor]:
+        """Train a velocity field on a noisy straight path between pseudo-pairs."""
+        if source.shape != target.shape or source.ndim != 2:
+            raise ValueError("Flow source and target must have the same 2D shape")
+        if not math.isfinite(noise_sigma) or noise_sigma < 0:
+            raise ValueError("Flow noise_sigma must be finite and nonnegative")
+        time = torch.rand(source.shape[0], device=source.device, dtype=source.dtype)
+        expand_time = time[:, None]
+        noise = torch.randn_like(source)
+        x_t = (1.0 - expand_time) * source + expand_time * target + noise_sigma * noise
+        velocity = target - source
+        velocity_hat = self.predict_velocity(x_t, time, condition)
+        return {
+            "time": time,
+            "noise": noise,
+            "x_t": x_t,
+            "velocity": velocity,
+            "velocity_hat": velocity_hat,
+            "flow_matching_loss": F.mse_loss(velocity_hat, velocity),
+        }
+
+    @torch.no_grad()
+    def sample_flow(
+        self,
+        source: torch.Tensor,
+        condition: torch.Tensor,
+        steps: int = 32,
+        guidance_scale: float = 1.0,
+        method: str = "rk4",
+    ) -> torch.Tensor:
+        """Integrate the learned velocity field from source time 0 to time 1."""
+        if source.ndim != 2 or source.shape[1] != self.latent_dim:
+            raise ValueError("Flow source must have shape [cells, latent_dim]")
+        if condition.shape[0] != source.shape[0]:
+            raise ValueError("Flow condition and source batch sizes differ")
+        if steps < 1 or method not in {"euler", "rk4"}:
+            raise ValueError("Flow integration needs positive steps and method 'euler' or 'rk4'")
+
+        def velocity(state: torch.Tensor, t_value: float) -> torch.Tensor:
+            time = torch.full((len(state),), t_value, device=state.device, dtype=state.dtype)
+            conditional = self.predict_velocity(state, time, condition)
+            if guidance_scale == 1.0 or self.condition_dropout <= 0:
+                return conditional
+            unconditional = self.predict_velocity(state, time, condition, force_unconditional=True)
+            return unconditional + guidance_scale * (conditional - unconditional)
+
+        state = source
+        dt = 1.0 / steps
+        for index in range(steps):
+            t0 = index * dt
+            if method == "euler":
+                state = state + dt * velocity(state, t0)
+                continue
+            k1 = velocity(state, t0)
+            k2 = velocity(state + 0.5 * dt * k1, t0 + 0.5 * dt)
+            k3 = velocity(state + 0.5 * dt * k2, t0 + 0.5 * dt)
+            k4 = velocity(state + dt * k3, t0 + dt)
+            state = state + (dt / 6.0) * (k1 + 2.0 * k2 + 2.0 * k3 + k4)
+        return state
+
     @torch.no_grad()
     def _p_sample(
         self,

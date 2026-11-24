@@ -46,14 +46,48 @@ python -m bacdiff.cli.sciplex3_pair \
 ```
 
 The matching ablation uses the same frozen VAE and compares `centroid`,
-`random`, and `ot` source construction:
+`random`, `ot`, and `otfm` source construction/objectives:
 
 ```bash
 python -m bacdiff.cli.sciplex3_pair_ablation fit \
   --config configs/config_sciplex3_pair_ablation.yaml --arm ot
 python -m bacdiff.cli.sciplex3_pair_ablation predict \
   --config configs/config_sciplex3_pair_ablation.yaml --arm ot --split ood
+
+python -m bacdiff.cli.sciplex3_pair_ablation fit \
+  --config configs/config_sciplex3_pair_ablation.yaml --arm otfm
+python -m bacdiff.cli.sciplex3_pair_ablation predict \
+  --config configs/config_sciplex3_pair_ablation.yaml --arm otfm --split ood
 ```
+
+The `otfm` control keeps the same frozen VAE, source/target OT assignments,
+posterior target sampling, condition encoder, NB decoder, validation scorer,
+and optimizer-step budget as the `ot` residual-DDPM arm. It replaces only the
+DDPM noise-prediction loss and reverse sampler. For a pseudo-pair with source
+and target latent states `z0` and `z1`, context anchor `a`, and train-fitted
+scale `s`, it uses
+
+```text
+r0 = (z0 - a) / s
+r1 = (z1 - a) / s
+rt = (1 - t) * r0 + t * r1 + sigma * epsilon
+u  = r1 - r0
+loss = mean((v_theta(rt, t, condition) - u) ** 2)
+```
+
+Here `t` is sampled uniformly from zero to one, `epsilon` is standard normal,
+and `sigma=1.5` follows the CellFlow OTFM adapter used in this benchmark. At
+inference, RK4 integrates the learned velocity field from the sampled vehicle
+residual. The endpoint is added back to the context anchor and decoded by the
+same frozen NB decoder. The velocity field is deterministic conditional on a
+source cell; population variability therefore comes from the sampled vehicle
+source and decoder sampling, unlike the DDPM's additional latent noise.
+
+This is a controlled latent-space OTFM adaptation, not a reproduction of the
+full CellFlow implementation: the representation, condition encoder, and
+decoder remain BacDiff's. The validation-selected checkpoint is selected with
+the same distribution metrics as the other arms; test metrics are not used for
+model selection.
 
 The scorer accepts generated `.npz` files with `--pred NAME=PATH` and writes
 condition- and pair-level CSV summaries. It compares predicted treated

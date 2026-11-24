@@ -82,20 +82,32 @@ python -m bacdiff.cli.sciplex3_pair \
   --config configs/config_sciplex3_pair_ood.yaml --mode both --split ood
 ```
 
-To compare centroid, random, and OT matching with a frozen VAE:
+To compare centroid, random, OT-residual DDPM, and OT flow matching with a frozen VAE:
 
 ```bash
 python -m bacdiff.cli.sciplex3_pair_ablation fit \
   --config configs/config_sciplex3_pair_ablation.yaml --arm ot
 python -m bacdiff.cli.sciplex3_pair_ablation predict \
   --config configs/config_sciplex3_pair_ablation.yaml --arm ot --split ood
+python -m bacdiff.cli.sciplex3_pair_ablation fit \
+  --config configs/config_sciplex3_pair_ablation.yaml --arm otfm
+python -m bacdiff.cli.sciplex3_pair_ablation predict \
+  --config configs/config_sciplex3_pair_ablation.yaml --arm otfm --split ood
 ```
+
+The `otfm` arm reuses the same OT pseudo-pairs but learns a continuous latent
+velocity field and integrates it from each training vehicle source at
+inference. Its constant-noise path and RK4 integration settings are in the
+`flow` section of `config_sciplex3_pair_ood.yaml`.
 
 The common scorer reports Energy/MMD distribution distances, mean expression
 metrics, treatment-effect correlation, response strata, pair-level summaries,
 and bootstrap contrasts. It uses train-only PCA and kernel calibration. The
 evaluation scripts are in `checking_data/`; datasets, checkpoints, and output
 tables are intentionally excluded from Git.
+
+The controlled latent OTFM comparison and its validation-selected results are
+documented in [`checking_data/SCIPLEX3_OTFM_REPORT.md`](checking_data/SCIPLEX3_OTFM_REPORT.md).
 
 ## Data preparation
 
